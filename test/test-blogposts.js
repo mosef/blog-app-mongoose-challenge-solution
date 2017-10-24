@@ -34,19 +34,19 @@ chai.use(chaiHttp);
   }
 //set up tests, start with before and fater functions
 describe('Blogposts API resource', function () {
-
+    //connect to db url
     before(function() {
     return runServer(TEST_DATABASE_URL);
     });
-
+    //seed the data
     beforeEach(function() {
     return seedBlogPostData();
     });
-
+    //after each test teardown the db
     afterEach(function() {
     return tearDownDb();
     });
-
+    //close server
     after(function() {
     return closeServer();
     })
@@ -54,7 +54,6 @@ describe('Blogposts API resource', function () {
     describe('GET endpoint', function() {
     
         it('should return existing blog posts', function() {
-
             let res;
             return chai.request(app)
             .get('/posts')
@@ -139,7 +138,6 @@ describe('Blogposts API resource', function () {
                 lastName: 'Lewis'
             }
             };
-    
             return BlogPost
             .findOne()
             .then(post => {
@@ -163,7 +161,6 @@ describe('Blogposts API resource', function () {
 //make test for delete endpoint
         describe('DELETE endpoint', function() {
         it('should delete posts by id', function() {
-    
             let post;
             return BlogPost
             .findOne()
