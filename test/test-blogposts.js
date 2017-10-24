@@ -8,96 +8,176 @@ const {app, runServer, closeServer} = require('../server');
 const {TEST_DATABASE_URL} = require('../config');
 
 chai.use(chaiHttp);
-
-function seedBlogdata() {
-    console.info('seeding blog data');
+//make teardown and seed functions
+  function seedBlogPostData() {
+    console.info('seeding blog post data');
     const seedData = [];
-
-    for (let i=0; i<11; i++) {
-        seedData.push(makeBlogData());
+    for (let i=1; i<=10; i++) {
+      seedData.push({
+        author: {
+          firstName: faker.name.firstName(),
+          lastName: faker.name.lastName()
+        },
+        title: faker.lorem.sentence(),
+        content: faker.lorem.text()
+      });
     }
     return BlogPost.insertMany(seedData);
-}
-
-function generateAuthor() {
-    const authors = [
-        {"firstName": "Billy", "lastName": "Smith"},
-        {"firstName": "Sally", "lastName": "Smith"},
-        {"firstName": "Wilson", "lastName": "Wilters"},
-        {"firstName": "Tabernacle", "lastName": "Jeff"}
-    ]
-    return authors[Math.floor(Math.random() * authors.length)];
-}
-
-function generateTitle() {
-    const titleNumbers = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-    const title = titleNumbers[Math.floor(Math.random() * titleNumbers.length)];
-    return {
-        title: title + "20 things -- you won't believe #4"
-    }
-}
-
-function generateContent() {
-    const holderText = "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
-    return {
-        content: holderText
-    }
-}
-
-function makeBlogData() {
-    return {
-        author: generateAuthor(),
-        title: generateTitle(),
-        content: generateContent()
-    }
-}
-
-function tearDownDb() {
-    console.warn('Deleting database');
-    return mongoose.connection.dropDatabase();
-}
-
+  }
+  function tearDownDb() {
+    return new Promise((resolve, reject) => {
+      console.warn('Deleting database');
+      mongoose.connection.dropDatabase()
+        .then(result => resolve(result))
+        .catch(err => reject(err))
+    });
+  }
+//set up tests, start with before and fater functions
 describe('Blogposts API resource', function () {
 
     before(function() {
-        return runServer(TEST_DATABASE_URL);
-      });
-    
-      beforeEach(function() {
-        return seedBlogdata();
-      });
-    
-      afterEach(function() {
-        return tearDownDb();
-      });
-    
-      after(function() {
-        return closeServer();
-      })
+    return runServer(TEST_DATABASE_URL);
+    });
 
-      it('should return all existing blogposts', function() {
-        // strategy:
-        //    1. get back all restaurants returned by by GET request to `/restaurants`
-        //    2. prove res has right status, data type
-        //    3. prove the number of restaurants we got back is equal to number
-        //       in db.
-        //
-        // need to have access to mutate and access `res` across
-        // `.then()` calls below, so declare it here so can modify in place
-        let res;
-        return chai.request(app)
-          .get('/BlogPost')
-          .then(function(_res) {
-            // so subsequent .then blocks can access resp obj.
-            res = _res;
-            res.should.have.status(200);
-            // otherwise our db seeding didn't work
-            res.body.BlogPost.should.have.length.of.at.least(1);
-            return BlogPost.count();
-          })
-          .then(function(count) {
-            res.body.BlogPost.should.have.length.of(count);
-          });
-      });
+    beforeEach(function() {
+    return seedBlogPostData();
+    });
 
+    afterEach(function() {
+    return tearDownDb();
+    });
+
+    after(function() {
+    return closeServer();
+    })
+//make test for get endpoint
+    describe('GET endpoint', function() {
+    
+        it('should return existing blog posts', function() {
+
+            let res;
+            return chai.request(app)
+            .get('/posts')
+            .then(_res => {
+                res = _res;
+                res.should.have.status(200);
+                res.body.should.have.length.of.at.least(1);
+                return BlogPost.count();
+            })
+            .then(count => {
+                res.body.should.have.length.of(count);
+            });
+        });
+    
+        it('should check for correct fields', function() {
+            let resPost;
+            return chai.request(app)
+            .get('/posts')
+            .then(function(res) {
+                res.should.have.status(200);
+                res.should.be.json;
+                res.body.should.be.a('array');
+                res.body.should.have.length.of.at.least(1);
+                res.body.forEach(function(post) {
+                post.should.be.a('object');
+                post.should.include.keys('id', 'title', 'content', 'author', 'created');
+                });
+                resPost = res.body[0];
+                return BlogPost.findById(resPost.id);
+            })
+            .then(post => {
+                resPost.title.should.equal(post.title);
+                resPost.content.should.equal(post.content);
+                resPost.author.should.equal(post.authorName);
+            });
+        });
+    });
+//make test for post endpoint
+        describe('POST endpoint', function() {
+        it('should make a post', function() {
+            const newPost = {
+                title: faker.lorem.sentence(),
+                author: {
+                firstName: faker.name.firstName(),
+                lastName: faker.name.lastName(),
+                },
+                content: faker.lorem.text()
+            };
+    //should check for correct params
+            return chai.request(app)
+            .post('/posts')
+            .send(newPost)
+            .then(function(res) {
+                res.should.have.status(201);
+                res.should.be.json;
+                res.body.should.be.a('object');
+                res.body.should.include.keys(
+                'id', 'title', 'content', 'author', 'created');
+                res.body.title.should.equal(newPost.title);
+                res.body.id.should.not.be.null;
+                res.body.author.should.equal(
+                `${newPost.author.firstName} ${newPost.author.lastName}`);
+                res.body.content.should.equal(newPost.content);
+                return BlogPost.findById(res.body.id);
+            })
+            .then(function(post) {
+                post.title.should.equal(newPost.title);
+                post.content.should.equal(newPost.content);
+                post.author.firstName.should.equal(newPost.author.firstName);
+                post.author.lastName.should.equal(newPost.author.lastName);
+            });
+        });
+    });
+//make test for put endpoint
+        describe('PUT endpoint', function() {
+        it('should update content sent', function() {
+            const updateData = {
+            title: 'clickbait',
+            content: 'blah blah blah',
+            author: {
+                firstName: 'Setven',
+                lastName: 'Lewis'
+            }
+            };
+    
+            return BlogPost
+            .findOne()
+            .then(post => {
+                updateData.id = post.id;
+                return chai.request(app)
+                .put(`/posts/${post.id}`)
+                .send(updateData);
+            })
+            .then(res => {
+                res.should.have.status(204);
+                return BlogPost.findById(updateData.id);
+            })
+            .then(post => {
+                post.title.should.equal(updateData.title);
+                post.content.should.equal(updateData.content);
+                post.author.firstName.should.equal(updateData.author.firstName);
+                post.author.lastName.should.equal(updateData.author.lastName);
+            });
+        });
+    });
+//make test for delete endpoint
+        describe('DELETE endpoint', function() {
+        it('should delete posts by id', function() {
+    
+            let post;
+            return BlogPost
+            .findOne()
+            .then(_post => {
+                post = _post;
+                return chai.request(app).delete(`/posts/${post.id}`);
+            })
+            .then(res => {
+                res.should.have.status(204);
+                return BlogPost.findById(post.id);
+            })
+            .then(_post => {
+                should.not.exist(_post);
+            });
+        });
+    });
 });
