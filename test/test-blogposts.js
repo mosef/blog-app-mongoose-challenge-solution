@@ -56,3 +56,48 @@ function tearDownDb() {
     console.warn('Deleting database');
     return mongoose.connection.dropDatabase();
 }
+
+describe('Blogposts API resource', function () {
+
+    before(function() {
+        return runServer(TEST_DATABASE_URL);
+      });
+    
+      beforeEach(function() {
+        return seedBlogdata();
+      });
+    
+      afterEach(function() {
+        return tearDownDb();
+      });
+    
+      after(function() {
+        return closeServer();
+      })
+
+      it('should return all existing blogposts', function() {
+        // strategy:
+        //    1. get back all restaurants returned by by GET request to `/restaurants`
+        //    2. prove res has right status, data type
+        //    3. prove the number of restaurants we got back is equal to number
+        //       in db.
+        //
+        // need to have access to mutate and access `res` across
+        // `.then()` calls below, so declare it here so can modify in place
+        let res;
+        return chai.request(app)
+          .get('/BlogPost')
+          .then(function(_res) {
+            // so subsequent .then blocks can access resp obj.
+            res = _res;
+            res.should.have.status(200);
+            // otherwise our db seeding didn't work
+            res.body.BlogPost.should.have.length.of.at.least(1);
+            return BlogPost.count();
+          })
+          .then(function(count) {
+            res.body.BlogPost.should.have.length.of(count);
+          });
+      });
+
+});
